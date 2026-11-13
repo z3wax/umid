@@ -61,7 +61,7 @@ def main():
         chat = save / ("chat" if arch == "umid" else "gpt_chat")
         # 2) Pretraining (uzilsa davom etadi)
         extra = (["--arch", "gpt"] if arch == "gpt" else
-                 ["--mixer", mixer] + (["--select-no-conv"] if mixer == "tanlov" else ["--persistent-heads", 3]))
+                 ["--mixer", mixer] + (["--select-plain"] if mixer == "tanlov" else ["--persistent-heads", 3]))
         run("train.py", "--tokens", data / "tokens.npy", "--tokenizer", data / "tokenizer.json", "--out", save / name,
             "--preset", args.preset, *extra, "--reset-on-eot", "--seq-len", args.seq_len, "--batch-size",
             args.batch_size, "--steps", args.steps, "--lr", args.lr, "--warmup", 500, "--dropout", 0.0,

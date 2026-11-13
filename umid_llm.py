@@ -383,6 +383,9 @@ class ModelConfig:
     select_k: int = 32
     select_chunk: int = 128
     dropout: float = 0.0
+    v2: bool = False              # Tanlov v2: q, k, v ustida qisqa kauzal konvolyutsiya (mahalliy tartib), chiqishda
+                                  # me'yorlash va darvozasiz (eski checkpoint'lar v2=False bilan ochiladi)
+    conv: int = 4                 # v2: konvolyutsiya oynasi (o'zi va oldingi 3 ta token)
     arch: str = "tanlov"          # "transformer" — faqat --compare dagi taqqoslash modeli
     mlp: int = 0                  # MLP kengligi (0 — standart)
 
@@ -457,21 +460,39 @@ class SelectiveMemory(nn.Module):
         H, D = c.n_heads, c.head_dim
         self.qkv = nn.Linear(c.d_model, 3 * H * D, bias=False)
         self.s_proj = nn.Linear(c.d_model, H)              # muhimlik (boshida 0 → "oxirgi K ta token")
-        self.gate = nn.Linear(c.d_model, H * D, bias=False)
-        self.o_norm = RMSNorm(D)
+        if c.v2:
+            self.conv_w = nn.Parameter(torch.empty(3 * H * D, c.conv))
+            nn.init.kaiming_uniform_(self.conv_w[:, None], a=math.sqrt(5))
+        else:
+            self.gate = nn.Linear(c.d_model, H * D, bias=False)
+            self.o_norm = RMSNorm(D)
         self.out = nn.Linear(H * D, c.d_model, bias=False)
         self.tau_log = nn.Parameter(torch.full((H,), math.log(8.0)))
         self.attn_offset = nn.Parameter(torch.full((H,), -math.log(c.select_k)))
         self.slope_raw = nn.Parameter(torch.log(torch.expm1(torch.logspace(math.log10(0.05), 0.0, H))))
 
+    def local(self, y, seg, cache):
+        """Kauzal depthwise konvolyutsiya + SiLU: har kanal oldingi (conv − 1) tokenni ko'radi; EOT dan o'tmaydi."""
+        B, T, C = y.shape
+        K = self.c.conv
+        yy = torch.cat([y.new_zeros(B, K - 1, C) if cache is None else cache.to(y.dtype), y], 1)
+        sg = F.pad(seg, (K - 1, 0))                          # kesh — joriy hujjatning davomi (0-segment)
+        w = self.conv_w.to(y.dtype)
+        out = sum(w[:, j] * yy[:, j:j + T] * (sg[:, j:j + T] == seg)[..., None] for j in range(K))
+        tail = yy[:, T:] * (sg[:, T:] == seg[:, -1:])[..., None]
+        return F.silu(out), tail
+
     def forward(self, x, state, reset):
         c, (B, T, _) = self.c, x.shape
         H, D = c.n_heads, c.head_dim
+        st = state or {}
+        qkv, tail = self.qkv(x), None
+        if c.v2:
+            qkv, tail = self.local(qkv, reset.long().cumsum(1), st.get("c"))
         with torch.autocast(x.device.type, enabled=False):   # xotira hisob-kitobi doim fp32 da
-            q, k, v = self.qkv(x).float().view(B, T, 3, H, D).unbind(2)
+            q, k, v = qkv.float().view(B, T, 3, H, D).unbind(2)
             q, k, v = F.normalize(q, dim=-1).transpose(1, 2), F.normalize(k, dim=-1).transpose(1, 2), v.transpose(1, 2)
             s = self.s_proj(x).float().transpose(1, 2)
-            st = state or {}
             n0 = st.get("n", torch.zeros(B, dtype=torch.long, device=x.device))
             pos = n0[:, None] + torch.arange(T, device=x.device)
             seg = reset.long().cumsum(1)
@@ -484,8 +505,13 @@ class SelectiveMemory(nn.Module):
                 o, cache = selective_read(q[:, :, a:b], k[:, :, a:b], v[:, :, a:b], s[:, :, a:b], pos[:, a:b], rel,
                                           c.select_k, tau, bias, slope, cache)
                 outs.append(o)
-        o = self.o_norm(torch.cat(outs, 2).transpose(1, 2).to(x.dtype)) * F.silu(self.gate(x)).view(B, T, H, D)
-        return self.out(o.reshape(B, T, H * D)), {"n": n0 + T, **dict(zip("kvspm", cache))}
+        o = torch.cat(outs, 2).transpose(1, 2).to(x.dtype)
+        new = {"n": n0 + T, **dict(zip("kvspm", cache))}
+        if c.v2:
+            new["c"] = tail
+        else:
+            o = self.o_norm(o) * F.silu(self.gate(x)).view(B, T, H, D)
+        return self.out(o.reshape(B, T, H * D)), new
 
 
 class Block(nn.Module):
@@ -512,7 +538,7 @@ class UmidLM(nn.Module):
         self.norm = RMSNorm(c.d_model)
         self.head = nn.Linear(c.d_model, c.vocab_size, bias=False)
         for name, p in self.named_parameters():
-            if name.endswith(("tau_log", "attn_offset", "slope_raw")) or "norm" in name or "n1" in name or "n2" in name:
+            if name.endswith(("tau_log", "attn_offset", "slope_raw", "conv_w")) or "norm" in name or "n1" in name or "n2" in name:
                 continue
             if name.endswith("bias") or "s_proj" in name:
                 nn.init.zeros_(p)
@@ -597,8 +623,9 @@ class Transformer(nn.Module):
 
 
 def transformer_config(mc: ModelConfig):
-    """Parametr soni Tanlov modeliga teng bo'lsin: Tanlov'ning ortiqcha qismi (gate d², muhimlik d·H) MLP ga beriladi."""
-    extra = mc.d_model * mc.d_model + mc.d_model * mc.n_heads
+    """Parametr soni Tanlov modeliga teng bo'lsin: Tanlov'ning ortiqcha qismi (muhimlik d·H; v2 da konvolyutsiya,
+    eskisida gate d²) MLP ga beriladi."""
+    extra = mc.d_model * mc.n_heads + (3 * mc.d_model * mc.conv if mc.v2 else mc.d_model * mc.d_model)
     return ModelConfig(**{**asdict(mc), "arch": "transformer", "mlp": mc.mlp_hidden + round(extra / (3 * mc.d_model))})
 
 
@@ -696,7 +723,7 @@ def pretrain(cfg, tok, tokens, save, pre=""):
     """pre="gpt_" — taqqoslash uchun Transformer (xuddi shu ma'lumot, qadamlar va batch'lar)."""
     dev, dtype, scaler = device_and_amp()
     d, L, H = PRESETS[cfg["preset"]]
-    mc = ModelConfig(vocab_size=tok.vocab_size, d_model=d, n_layers=L, n_heads=H, select_k=cfg["select_k"])
+    mc = ModelConfig(vocab_size=tok.vocab_size, d_model=d, n_layers=L, n_heads=H, select_k=cfg["select_k"], v2=True)
     lr = cfg["lr"]
     if pre:
         mc, lr = transformer_config(mc), cfg["compare_lr"] or cfg["lr"]

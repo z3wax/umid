@@ -16,25 +16,28 @@ python chat.py --ckpt checkpoints/umid/model.pt                                 
 
 Oxirgi yangilanish: 2026-11-13. Barcha raqamlar o'lchangan; kutilgan yoki taxminiy raqam yozilmaydi.
 
-**Hozirgi holat: Umid (Tanlov) Transformer'dan hali o'tmagan.**
+**Hozirgi holat: Umid (Tanlov v2) kattaroq matnda Transformer'dan biroz yaxshi, kichik o'zbekcha matnda hali emas.**
 
-| o'lchov (4.26M parametr, teng sharoit) | Transformer | Umid (Tanlov) | kim oldinda |
+| o'lchov (teng parametr, 4.25M / 4.26M) | Transformer | Umid (Tanlov v2) | kim oldinda |
 |---|---|---|---|
-| Val loss, o'zbekcha matn (pastroq yaxshi) | **4.066** | 4.124 | Transformer (0.058) |
-| Val loss, 10 MB inglizcha matn, bir martalik o'qitish | **4.350** | 4.572 | Transformer (0.222) |
-| Yangi savollarga to'g'ri javob, jarima bilan | 57% | 58% | teng (xato ±6 ball) |
-| Yangi savollarga to'g'ri javob, jarimasiz | 62% | 58% | teng (xato ±6 ball) |
+| Val loss, 10 MB inglizcha matn, 3 seed (pastroq yaxshi) | 4.350, 4.379, 4.367 | **4.285, 4.300, 4.277** | Umid (o'rtacha 0.078) |
+| Xuddi shu, lr 3e-3 (1 seed) | 4.328 | **4.252** | Umid (0.076) |
+| Val loss, kichik o'zbekcha matn (1 seed, har biri eng yaxshi lr da) | **4.066** | 4.102 | Transformer (0.036) |
+| Yangi savollarga to'g'ri javob (eski Tanlov; v2 hali o'lchanmagan) | 57% / 62% | 58% / 58% | teng (xato ±6 ball) |
 | Suhbatda aytilgan yangi faktni eslash | 1–6% | 1–4% | ikkalasi ham uddalamaydi |
-| Xotira hajmi generatsiyada | kontekst bilan o'sadi | o'zgarmas (K ta token) | Umid |
+| Xotira hajmi generatsiyada | kontekst bilan o'sadi | o'zgarmas (K=32 ta token) | Umid |
+| O'qitish tezligi (CPU, token/s) | **~4500** | ~3100 | Transformer |
 
-Har model o'zining eng yaxshi o'rganish tezligida (Transformer 1e-3, Tanlov 2e-3). Tafsilotlar:
-[Savol-javob sifati](#savol-javob-sifati-umid-va-transformer).
-
-**Davom etayotgan ish** (natija chiqqach jadvalga qo'shiladi):
-- Tanlov o'qish mexanizmining variantlari: yaqinlik jadvali, "bo'sh o'rin" bilan me'yorlash;
-- tashxis: sigmoid o'rniga softmax qo'yilsa farq yopiladimi.
+- Bu "10 baravar yaxshi" emas: perplexity bo'yicha farq taxminan 8% (exp(4.365) ≈ 78.6 ga qarshi exp(4.287) ≈ 72.7).
+- O'lcham kichik (4M parametr, CPU, 600 qadam). Katta ma'lumotda GPU da `umid_llm.py --compare 1` bilan tasdiqlash kerak.
+- Tanlov v2: q, k, v ustida qisqa kauzal konvolyutsiya (mahalliy tartib), chiqishda me'yorlash va darvozasiz;
+  sigmoid o'qish va K ta tokenlik o'zgarmas xotira saqlangan. `train.py --mixer tanlov --select-plain`;
+  `umid_llm.py` da standart.
 
 **Yangilanishlar tarixi**
+- 2026-11-13 — **Tanlov v2**: 10 MB matnda 3 seed da Transformer'dan yaxshi (o'rtacha 4.287 ga qarshi 4.365; lr 3e-3 da
+  4.252 ga qarshi 4.328). Kichik o'zbekcha matnda Transformer hali 0.036 oldinda (4.102 ga qarshi 4.066).
+  Boshqa nomzodlar: oddiy ko'paytma bilan 4.327, K=64 4.340, darvoza saqlangan 4.382. v2 `umid_llm.py` ga ko'chirildi.
 - 2026-11-13 — tashxis (10 MB matn, lr 2e-3; Transformer 4.350, asosiy Tanlov 4.572). Bitta o'zgarish bilan:
   softmax 4.572 (sigmoid aybdor emas); yaqinlik jadvali 4.558; K=128 4.483; me'yorlash va darvozasiz 4.490;
   kosinus o'rniga oddiy ko'paytma 4.470; qkv konvolyutsiyasi bilan 4.372 (parametr 6% ko'p). Hammasi birga

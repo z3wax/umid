@@ -2,6 +2,7 @@
 import importlib.util
 from pathlib import Path
 
+import pytest
 import torch
 import torch.nn.functional as F
 
@@ -10,9 +11,10 @@ u = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(u)
 
 
-def test_single_file_model_parallel_equals_step_by_step():
+@pytest.mark.parametrize("v2", [False, True])
+def test_single_file_model_parallel_equals_step_by_step(v2):
     torch.manual_seed(0)
-    m = u.UmidLM(u.ModelConfig(vocab_size=64, d_model=32, n_layers=2, n_heads=2, select_k=5, select_chunk=7)).eval()
+    m = u.UmidLM(u.ModelConfig(vocab_size=64, d_model=32, n_layers=2, n_heads=2, select_k=5, select_chunk=7, v2=v2)).eval()
     for blk in m.blocks:
         torch.nn.init.normal_(blk.mem.s_proj.weight, std=1.0)
     idx = torch.randint(0, 63, (1, 40))
@@ -48,8 +50,8 @@ def test_single_file_cleaning_and_tokenizer():
 
 def test_single_file_compare_transformer():
     """--compare dagi Transformer: parametr soni teng, generatsiyadagi davom ettirish aniq, hujjat maskasi ishlaydi."""
-    for d, L, H in u.PRESETS.values():
-        mc = u.ModelConfig(vocab_size=16000, d_model=d, n_layers=L, n_heads=H)
+    for d, L, H, v2 in [(*p, v) for p in u.PRESETS.values() for v in (False, True)]:
+        mc = u.ModelConfig(vocab_size=16000, d_model=d, n_layers=L, n_heads=H, v2=v2)
         a = sum(p.numel() for p in u.UmidLM(mc).parameters())
         b = sum(p.numel() for p in u.Transformer(u.transformer_config(mc)).parameters())
         assert abs(a - b) / a < 1e-3
