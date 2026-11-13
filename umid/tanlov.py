@@ -57,7 +57,8 @@ def _segment_start(seg):
 
 
 @fp32_on_cuda
-def selective_read(q, k, v, s, pos, seg, K, tau, bias, slope, cache=None, u=None, eta=None):
+def selective_read(q, k, v, s, pos, seg, K, tau, bias, slope, cache=None, u=None, eta=None, near=None,
+                   null_norm=False, softmax=False):
     """Bir bo'lak uchun tanlov xotirasi.
 
     q, k: [B, H, T, Dk] (L2-normallangan); v: [B, H, T, Dv]; s: [B, H, T] muhimlik;
@@ -93,11 +94,22 @@ def selective_read(q, k, v, s, pos, seg, K, tau, bias, slope, cache=None, u=None
     allowed = (rank < K) & valid[:, :, None, :] & (idx[None, :] < g[:, None]) & same_seg
     allowed = allowed | (idx[None, :] == g[:, None])                          # o'zi doim
 
-    dist = (pos[:, None, :, None] - p_all[:, :, None, :]).clamp(min=0).to(q.dtype)
+    idist = (pos[:, None, :, None] - p_all[:, :, None, :]).clamp(min=0)
+    dist = idist.to(q.dtype)
     logits = (tau[:, None, None] * (q @ k_all.transpose(-1, -2)) + bias[:, None, None]
               + F.logsigmoid(s_all)[:, :, None, :] - slope[:, None, None] * torch.log1p(dist))
-    w = torch.sigmoid(logits) * allowed
+    if near is not None:   # yaqinlik jadvali: aniq masofa 0…P−1 uchun o'rganiladigan siljish (undan uzoqda 0)
+        P = near.size(1)
+        table = F.pad(near, (0, 1))                                          # [H, P+1], oxirgisi 0
+        logits = logits + table[torch.arange(table.size(0), device=q.device)[None, :, None, None],
+                                idist.clamp(max=P)]
+    if softmax:            # faqat tashxis uchun: saqlanganlar ustida softmax
+        w = logits.masked_fill(~allowed, float('-inf')).softmax(-1)
+    else:
+        w = torch.sigmoid(logits) * allowed
     o = w @ v_all
+    if null_norm:          # "bo'sh o'rin" bilan me'yorlash: hech narsa topilmasa chiqish 0 ga yaqin
+        o = o / (1.0 + w.sum(-1, keepdim=True))
     if u is not None:
         w_ex = w.masked_fill(idx[None, :] == g[:, None], 0.0)              # token o'z yozuvini boyitmaydi
         # bo'lak ichida oldinroq kelgan i tokenlar t o'qiydigan yozuvlarni boyitgan: E[t, i] = Σ_j w_tj w_ij

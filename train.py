@@ -51,6 +51,9 @@ def parse_args():
                     help="xotira algoritmi: delta (Gated Delta) yoki tanlov (eng muhim K ta token, umid/tanlov.py)")
     ap.add_argument("--select-k", type=int, default=32, help="tanlov: har head saqlaydigan tokenlar soni")
     ap.add_argument("--select-enrich", action="store_true", help="tanlov: o'qib boyitish")
+    ap.add_argument("--select-near", type=int, default=0, help="tanlov: yaqinlik jadvali o'lchami")
+    ap.add_argument("--select-softmax", action="store_true", help="tanlov: faqat tashxis")
+    ap.add_argument("--select-null", action="store_true", help="tanlov: bo'sh o'rin bilan me'yorlash")
     ap.add_argument("--select-no-conv", action="store_true", help="tanlov: konvolyutsiyasiz (sof Tanlov)")
     ap.add_argument("--mlp-hidden", type=int, default=0, help="MLP o'lchami (0 — d_model·8/3); parametrlarni tenglashtirish uchun")
     ap.add_argument("--n-reads", type=int, default=None, help="fikrlash rejimi: xotiradan qayta so'rashlar soni (standart 1)")
@@ -98,6 +101,7 @@ def build_config(args, vocab_size):
                       reset_on_eot=args.reset_on_eot, decouple_erase=args.decouple_erase,
                       persistent_heads=args.persistent_heads, canon=args.canon, mixer=args.mixer,
                       select_k=args.select_k, select_enrich=args.select_enrich,
+                      select_near=args.select_near, select_null=args.select_null, select_softmax=args.select_softmax,
                       select_conv=not args.select_no_conv, mlp_hidden_size=args.mlp_hidden, **kw)
 
 

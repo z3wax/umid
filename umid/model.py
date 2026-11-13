@@ -48,6 +48,9 @@ class UmidConfig:
     select_k: int = 32            # "tanlov": har head saqlaydigan tokenlar soni (xotira hajmi o'zgarmas)
     select_conv: bool = True      # "tanlov": q, k, v ustida qisqa konvolyutsiya (False — sof Tanlov, konvolyutsiyasiz)
     select_enrich: bool = False   # "tanlov": o'qib boyitish — o'qigan token o'qilgan yozuvlarga ma'lumot qaytaradi
+    select_near: int = 0          # "tanlov": yaqinlik jadvali o'lchami (0 — o'chiq)
+    select_softmax: bool = False  # faqat tashxis: saqlanganlar ustida softmax
+    select_null: bool = False     # "tanlov": o_norm o'rniga "bo'sh o'rin" bilan me'yorlash
     select_chunk: int = 128       # "tanlov": o'qitishda bo'lak uzunligi (natijaga ta'sir qilmaydi, faqat tezlik)
     frame: bool = False           # "optimal" uchun: kalit/so'rovlar aks ettirishlar bilan aylanadigan tizimda
     mlp_hidden_size: int = 0      # 0 bo'lmasa MLP o'lchamini aniq belgilaydi (parametrlarni tenglashtirish uchun)
@@ -352,6 +355,8 @@ class SelectiveMemory(nn.Module):
         slope = torch.logspace(math.log10(0.05), 0.0, H)                             # head'lar: uzoqdan yaqinga
         self.slope_raw = nn.Parameter(torch.log(torch.expm1(slope)))                  # softplus⁻¹
         self._zero_init = ("s_proj",)
+        if cfg.select_near:
+            self.near = nn.Parameter(torch.zeros(H, cfg.select_near))
         if cfg.select_enrich:   # o'qib boyitish: u — qaytariladigan ma'lumot, η — kuchi (boshida kichik)
             self.u_proj = nn.Linear(D, H * dv, bias=False)
             self.eta_raw = nn.Parameter(torch.full((H,), -3.0))
@@ -386,10 +391,14 @@ class SelectiveMemory(nn.Module):
             rel = seg[:, a:b] - seg[:, a - 1:a] if a else seg[:, a:b]
             o, cache = selective_read(q[:, :, a:b], k[:, :, a:b], v[:, :, a:b], s[:, :, a:b], pos[:, a:b], rel,
                                       cfg.select_k, tau, bias, slope, cache,
-                                      None if u is None else u[:, :, a:b], eta)
+                                      None if u is None else u[:, :, a:b], eta,
+                                      self.near.to(fdt) if cfg.select_near else None, cfg.select_null, cfg.select_softmax)
             outs.append(o)
         o = torch.cat(outs, 2)
-        o = self.o_norm(o.transpose(1, 2).to(x.dtype)) * F.silu(self.g_proj(x)).view(B, T, H, dv)
+        o = o.transpose(1, 2).to(x.dtype)
+        if not cfg.select_null:
+            o = self.o_norm(o)
+        o = o * F.silu(self.g_proj(x)).view(B, T, H, dv)
         new_state = {"n": n0 + T} if conv_cache is None else {"conv": conv_cache, "n": n0 + T}
         new_state.update(zip(("ck", "cv", "cs", "cp", "cm"), cache))
         return self.o_proj(o.reshape(B, T, H * dv)), new_state
@@ -461,7 +470,7 @@ class UmidLM(nn.Module):
 
     def _init_weights(self):
         for name, p in self.named_parameters():
-            if name.endswith(("A_log", "dt_bias", "lam_raw", "tau_log", "attn_offset", "slope_raw", "eta_raw")) \
+            if name.endswith(("A_log", "dt_bias", "lam_raw", "tau_log", "attn_offset", "slope_raw", "eta_raw", "near")) \
                     or "conv" in name or "norm" in name:
                 continue
             if name.endswith("bias"):
