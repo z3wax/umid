@@ -23,7 +23,7 @@ Oxirgi yangilanish: 2026-11-13. Barcha raqamlar o'lchangan; kutilgan yoki taxmin
 | Val loss, 10 MB inglizcha matn, 3 seed (pastroq yaxshi) | 4.350, 4.379, 4.367 | **4.285, 4.300, 4.277** | Umid (o'rtacha 0.078) |
 | Xuddi shu, lr 3e-3 (1 seed) | 4.328 | **4.252** | Umid (0.076) |
 | Val loss, kichik o'zbekcha matn (1 seed, har biri eng yaxshi lr da) | **4.066** | 4.102 | Transformer (0.036) |
-| Yangi savollarga to'g'ri javob (eski Tanlov; v2 hali o'lchanmagan) | 57% / 62% | 58% / 58% | teng (xato ±6 ball) |
+| Yangi savollarga to'g'ri javob, jarima bilan / jarimasiz (1 seed) | 57% / 62% | 52% / 52% (eski Tanlov: 58% / 58%) | Transformer (xato ±6 ball) |
 | Suhbatda aytilgan yangi faktni eslash | 1–6% | 1–4% | ikkalasi ham uddalamaydi |
 | Xotira hajmi generatsiyada | kontekst bilan o'sadi | o'zgarmas (K=32 ta token) | Umid |
 | O'qitish tezligi (CPU, token/s) | **~4500** | ~3100 | Transformer |
@@ -35,6 +35,7 @@ Oxirgi yangilanish: 2026-11-13. Barcha raqamlar o'lchangan; kutilgan yoki taxmin
   `umid_llm.py` da standart.
 
 **Yangilanishlar tarixi**
+- 2026-11-13 — Tanlov v2 savol-javobda (kichik o'zbekcha matn, SFT, 60 savol): 52% / 52%. Transformer 57% / 62%, eski Tanlov 58% / 58%. Farqlar bitta seed xatosi (±6 ball) atrofida, lekin v2 bu yerda yaxshilanish bermadi.
 - 2026-11-13 — **Tanlov v2**: 10 MB matnda 3 seed da Transformer'dan yaxshi (o'rtacha 4.287 ga qarshi 4.365; lr 3e-3 da
   4.252 ga qarshi 4.328). Kichik o'zbekcha matnda Transformer hali 0.036 oldinda (4.102 ga qarshi 4.066).
   Boshqa nomzodlar: oddiy ko'paytma bilan 4.327, K=64 4.340, darvoza saqlangan 4.382. v2 `umid_llm.py` ga ko'chirildi.
