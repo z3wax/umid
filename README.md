@@ -21,6 +21,7 @@ Oxirgi yangilanish: 2026-11-13. Barcha raqamlar o'lchangan; kutilgan yoki taxmin
 | o'lchov (4.26M parametr, teng sharoit) | Transformer | Umid (Tanlov) | kim oldinda |
 |---|---|---|---|
 | Val loss, o'zbekcha matn (pastroq yaxshi) | **4.066** | 4.124 | Transformer (0.058) |
+| Val loss, 10 MB inglizcha matn, bir martalik o'qitish | **4.350** | 4.572 | Transformer (0.222) |
 | Yangi savollarga to'g'ri javob, jarima bilan | 57% | 58% | teng (xato ±6 ball) |
 | Yangi savollarga to'g'ri javob, jarimasiz | 62% | 58% | teng (xato ±6 ball) |
 | Suhbatda aytilgan yangi faktni eslash | 1–6% | 1–4% | ikkalasi ham uddalamaydi |
@@ -30,11 +31,11 @@ Har model o'zining eng yaxshi o'rganish tezligida (Transformer 1e-3, Tanlov 2e-3
 [Savol-javob sifati](#savol-javob-sifati-umid-va-transformer).
 
 **Davom etayotgan ish** (natija chiqqach jadvalga qo'shiladi):
-- ikkinchi sinov maydoni: 10 MB matn, bir martalik o'qitish (ortiqcha moslashishsiz);
 - Tanlov o'qish mexanizmining variantlari: yaqinlik jadvali, "bo'sh o'rin" bilan me'yorlash;
 - tashxis: sigmoid o'rniga softmax qo'yilsa farq yopiladimi.
 
 **Yangilanishlar tarixi**
+- 2026-11-13 — ikkinchi sinov maydoni (WikiText-2, 10 MB, 600 qadam, ortiqcha moslashishsiz; ikkala model lr 2e-3 da eng yaxshi): Transformer 4.350, Tanlov 4.572. Farq o'zbekcha kichik matndagidan katta — Tanlov'ning o'qish mexanizmi hali zaif.
 - 2026-11-13 — repo `z3wax/umid` ga ko'chirildi; o'qish mexanizmining sinov variantlari qo'shildi (natija hali yo'q).
 - 2026-10-27 — halol taqqoslash: lr sinovidan keyin Transformer val loss da 0.058 oldinda; K=64/128 yordam bermadi; `umid_llm.py --compare 1` qo'shildi.
 
