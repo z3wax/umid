@@ -230,7 +230,7 @@ class Tokenizer:
 
 
 # ============================== 3. MA'LUMOT ==============================
-GPTUZ_RAW = "https://raw.githubusercontent.com/ABDULHODIY1/GPT_UZ/main/chat-data/savol-javob/"
+GPTUZ_RAW = "https://raw.githubusercontent.com/z3wax/umid/main/chat-data/savol-javob/"
 GPTUZ_FILES = ["01_muloqot", "02_ozbekiston", "03_fan", "04_texnologiya", "05_salomatlik_hayot", "06_vaqt_hisob",
                "07_tabiat_turmush", "08_turli_ifodalar", "09_qayta_ifodalar"]
 IDENTITY = [("Sen kimsan?", "Men Umid, o'zbek tilida suhbatlashadigan sun'iy intellekt yordamchisiman."),
