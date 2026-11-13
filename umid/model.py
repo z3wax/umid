@@ -349,8 +349,9 @@ class SelectiveMemory(nn.Module):
         self.qkv_proj = nn.Linear(D, H * (2 * dk + dv), bias=False)
         self.qkv_conv = ShortConv(H * (2 * dk + dv), cfg.conv_size) if cfg.select_conv else None
         self.s_proj = nn.Linear(D, H, bias=True)          # muhimlik; boshida 0 → "oxirgi K ta token" oynasi
-        self.g_proj = nn.Linear(D, H * dv, bias=False)
-        self.o_norm = RMSNorm(dv, cfg.norm_eps)
+        if not cfg.select_plain:
+            self.g_proj = nn.Linear(D, H * dv, bias=False)
+            self.o_norm = RMSNorm(dv, cfg.norm_eps)
         self.o_proj = nn.Linear(H * dv, D, bias=False)
         self.tau_log = nn.Parameter(torch.full((H,), math.log(8.0)))                 # o'xshashlik keskinligi
         self.attn_offset = nn.Parameter(torch.full((H,), -math.log(cfg.select_k)))   # sigmoid siljishi

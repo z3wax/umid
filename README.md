@@ -35,6 +35,12 @@ Har model o'zining eng yaxshi o'rganish tezligida (Transformer 1e-3, Tanlov 2e-3
 - tashxis: sigmoid o'rniga softmax qo'yilsa farq yopiladimi.
 
 **Yangilanishlar tarixi**
+- 2026-11-13 — tashxis (10 MB matn, lr 2e-3; Transformer 4.350, asosiy Tanlov 4.572). Bitta o'zgarish bilan:
+  softmax 4.572 (sigmoid aybdor emas); yaqinlik jadvali 4.558; K=128 4.483; me'yorlash va darvozasiz 4.490;
+  kosinus o'rniga oddiy ko'paytma 4.470; qkv konvolyutsiyasi bilan 4.372 (parametr 6% ko'p). Hammasi birga
+  (softmax, K=128) 4.353 — Transformer bilan teng. Xulosa: farq asosan mahalliy tartib ma'lumotidan
+  (konvolyutsiya), kosinus cheklovidan, chiqishdagi me'yorlash/darvozadan va xotira hajmidan keladi.
+  Kichik o'zbekcha matnda bu variantlar foyda bermadi (4.15–4.21), chunki u yerda ortiqcha moslashish ustun.
 - 2026-11-13 — ikkinchi sinov maydoni (WikiText-2, 10 MB, 600 qadam, ortiqcha moslashishsiz; ikkala model lr 2e-3 da eng yaxshi): Transformer 4.350, Tanlov 4.572. Farq o'zbekcha kichik matndagidan katta — Tanlov'ning o'qish mexanizmi hali zaif.
 - 2026-11-13 — repo `z3wax/umid` ga ko'chirildi; o'qish mexanizmining sinov variantlari qo'shildi (natija hali yo'q).
 - 2026-10-27 — halol taqqoslash: lr sinovidan keyin Transformer val loss da 0.058 oldinda; K=64/128 yordam bermadi; `umid_llm.py --compare 1` qo'shildi.
