@@ -49,6 +49,8 @@ class UmidConfig:
     select_conv: bool = True      # "tanlov": q, k, v ustida qisqa konvolyutsiya (False — sof Tanlov, konvolyutsiyasiz)
     select_enrich: bool = False   # "tanlov": o'qib boyitish — o'qigan token o'qilgan yozuvlarga ma'lumot qaytaradi
     select_near: int = 0          # "tanlov": yaqinlik jadvali o'lchami (0 — o'chiq)
+    select_plain: bool = False    # faqat tashxis: o_norm va darvozasiz
+    select_dot: bool = False      # faqat tashxis: kosinus o'rniga skalyar ko'paytma
     select_softmax: bool = False  # faqat tashxis: saqlanganlar ustida softmax
     select_null: bool = False     # "tanlov": o_norm o'rniga "bo'sh o'rin" bilan me'yorlash
     select_chunk: int = 128       # "tanlov": o'qitishda bo'lak uzunligi (natijaga ta'sir qilmaydi, faqat tezlik)
@@ -371,15 +373,19 @@ class SelectiveMemory(nn.Module):
         if self.qkv_conv is not None:
             qkv, conv_cache = self.qkv_conv(qkv, st.get("conv"), reset)
         q, k, v = qkv.split([H * dk, H * dk, H * dv], dim=-1)
-        q = F.normalize(q.reshape(B, T, H, dk).to(fdt), dim=-1).transpose(1, 2)
-        k = F.normalize(k.reshape(B, T, H, dk).to(fdt), dim=-1).transpose(1, 2)
+        q, k = q.reshape(B, T, H, dk).to(fdt), k.reshape(B, T, H, dk).to(fdt)
+        if cfg.select_dot:
+            q = q / dk ** 0.5
+        else:
+            q, k = F.normalize(q, dim=-1), F.normalize(k, dim=-1)
+        q, k = q.transpose(1, 2), k.transpose(1, 2)
         v = v.reshape(B, T, H, dv).to(fdt).transpose(1, 2)
         s = self.s_proj(x).to(fdt).transpose(1, 2)                                   # [B, H, T]
         n0 = st["n"] if "n" in st else torch.zeros(B, dtype=torch.long, device=x.device)
         pos = n0[:, None] + torch.arange(T, device=x.device)
         seg = reset.long().cumsum(1) if reset is not None else torch.zeros(B, T, dtype=torch.long, device=x.device)
         cache = tuple(st[n] for n in ("ck", "cv", "cs", "cp", "cm")) if "ck" in st else None
-        tau, bias, slope = self.tau_log.exp().to(fdt), self.attn_offset.to(fdt), F.softplus(self.slope_raw).to(fdt)
+        tau, bias, slope = (torch.ones_like(self.tau_log) if cfg.select_dot else self.tau_log.exp()).to(fdt), self.attn_offset.to(fdt), F.softplus(self.slope_raw).to(fdt)
         u = eta = None
         if cfg.select_enrich:
             u = self.u_proj(x).to(fdt).reshape(B, T, H, dv).transpose(1, 2)
@@ -396,9 +402,10 @@ class SelectiveMemory(nn.Module):
             outs.append(o)
         o = torch.cat(outs, 2)
         o = o.transpose(1, 2).to(x.dtype)
-        if not cfg.select_null:
-            o = self.o_norm(o)
-        o = o * F.silu(self.g_proj(x)).view(B, T, H, dv)
+        if not cfg.select_plain:
+            if not cfg.select_null:
+                o = self.o_norm(o)
+            o = o * F.silu(self.g_proj(x)).view(B, T, H, dv)
         new_state = {"n": n0 + T} if conv_cache is None else {"conv": conv_cache, "n": n0 + T}
         new_state.update(zip(("ck", "cv", "cs", "cp", "cm"), cache))
         return self.o_proj(o.reshape(B, T, H * dv)), new_state
